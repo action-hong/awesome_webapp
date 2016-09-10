@@ -51,8 +51,12 @@ class Comment(Model):
 
 async def test(loop):
 	await orm.create_pool(loop=loop,user='root',password='mobi0982',db='awesome')
-	u = User(name='Test', email='test@example.com', passwd='1234567890', image='about:blank')
+	u = User(name='Bob', email='bob@example.com', passwd='1234567890', image='about:blank')
+	u1 = User(name='Jane', email='jone@example.com', passwd='1234567890', image='about:blank')
+	u2 = User(name='Chris', email='chris@example.com', passwd='1234567890', image='about:blank')
 	await u.save()
+	await u1.save()
+	await u2.save()
 
 def main():
 	import asyncio

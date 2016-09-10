@@ -35,7 +35,7 @@ async def create_pool(loop,**kw):
 
 #select `p_id`,`name`,`password` from user where `p_id` = ?   (sql)
 async def select(sql,args,size=None):
-	log(sql,args)
+	# log(sql,args)
 	global __pool
 	async with __pool.get() as conn:
 		cur = await conn.cursor(aiomysql.DictCursor)
@@ -49,8 +49,7 @@ async def select(sql,args,size=None):
 		return rs		
 
 async def execute(sql,args,autocommit=True):
-	log(sql)
-	log(args)
+	# log(sql,args)
 	async with __pool.get() as conn:
 		if not autocommit:
 			await conn.begin()
