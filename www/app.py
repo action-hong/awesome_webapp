@@ -1,3 +1,4 @@
+
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 # @Date    : 2016-09-08 17:19:27
@@ -92,6 +93,7 @@ async def response_factory(app,handler):
 				#把__user_-取出来
 				r['__user__'] = request.__user__
 				#加载模板文件,传递信息render(**r)将信息搞进去
+				logging.info(r)
 				resp = web.Response(body=app['__templating__'].get_template(template).render(**r).encode('utf-8'))
 				resp.content_type = 'text/html;charset=utf-8'
 				return resp

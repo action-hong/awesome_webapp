@@ -44,17 +44,7 @@ def get_page_index(page_str):
 		p = 1
 	return p
 
-@get('/register')
-async def register():
-	return {
-		'__template__':'register.html'
-	}
 
-@get('/signin')
-async def signin():
-	return {
-		'__template__':'signin.html'
-	}
 
 #一个转换而已,没有IO操作,还搞成aysnc
 def user2cookie(user,max_age):
@@ -97,26 +87,44 @@ async def cookie2user(cookie_str):
 		logging.exception(e)
 		return None
 
+def text2html(text):
+    lines = map(lambda s: '<p>%s</p>' % s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;'), filter(lambda s: s.strip() != '', text.split('\n')))
+    return ''.join(lines)
 
+#--------------------------用户浏览页面----------------------------------------
 
+#主界面
 @get('/')
-async def index(request):
-	summary = 'Lorem ipsum dolor sit amet, consectetur adipisicing elitsed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-	# blogs = [
-	#     Blog(id='1', name='Test Blog', summary=summary, created_at=time.time()-120),
-	#     Blog(id='2', name='Something New', summary=summary, created_at=time.time()-3600),
-	#     Blog(id='3', name='Learn Swift', summary=summary, created_at=time.time()-7200)
-	# ]
-	blogs = await Blog.findAll(orderBy='created_at desc')
+async def index(*,page='1'):
+	page_index = get_page_index(page)
+	num = await Blog.findNumber('count(id)')
+	p = Page(num,page_index)
+	if num == 0:
+		blogs = []
+	else:
+		blogs = await Blog.findAll(orderBy='created_at desc',limit=(p.offset,p.limit))
 	# return dict(blogs=blogs)
 	return {
 		'__template__': 'blogs.html',
-		'blogs': blogs
+		'blogs': blogs,
+		'page' : p     #坑呀,要的是这个呀Page对象呀,才能方便找出是否有上下页
 	}
 
+#注册页面
+@get('/register')
+async def register():
+	return {
+		'__template__':'register.html'
+	}
 
+#登录页面
+@get('/signin')
+async def signin():
+	return {
+		'__template__':'signin.html'
+	}
 
-
+#登录操作
 @post('/api/authenticate')
 async def authenticate(*,email,passwd):
 	if not email:
@@ -145,7 +153,7 @@ async def authenticate(*,email,passwd):
 	r.body = json.dumps(user,ensure_ascii=False).encode('utf-8')
 	return r
 
-
+#注销页
 @get('/signout')
 async def signout(request):
 	referer = request.headers.get('Referer')
@@ -154,13 +162,17 @@ async def signout(request):
 	logging.info('user sign out.')
 	return r
 
-
+#博客详情页
 @get('/blog/{id}')
 async def get_blog(id):
 	blog = await Blog.find(id)
 	comments = await Comment.findAll('blog_id=?',[id],orderBy='created_at desc')
 	for c in comments:
 		c.html_content = text2html(c.content)
+
+	#神器呀,直接就可以转换markdown格式
+	blog.html_content = markdown2.markdown(blog.content)
+
 	return {
 		'__template__':'blog.html',
 		'blog':blog,
@@ -168,6 +180,7 @@ async def get_blog(id):
 	}
 
 
+#查看某一个
 @get('/api/blogs/{id}')
 async def api_get_blogs(*,id):
 	blog = await Blog.find(id)
@@ -175,9 +188,17 @@ async def api_get_blogs(*,id):
 
 #---------------------------------管理页面--------------------------------------------
 
+@get('/manage/')
+def manage():
+    return 'redirect:/manage/comments'
+
+
 @get('/manage/comments')
-async def manage_comments():
-	pass
+def manage_comments(*, page='1'):
+    return {
+        '__template__': 'manage_comments.html',
+        'page_index': get_page_index(page)
+    }
 
 @get('/manage/blogs')
 def manage_blogs(*,page='1'):
@@ -205,8 +226,11 @@ async def manage_edit_blog(*,id):
 
 
 @get('/manage/users')
-async def manage_users():
-	pass	
+def manage_users(*, page='1'):
+    return {
+        '__template__': 'manage_users.html',
+        'page_index': get_page_index(page)
+    }	
 
 
 
@@ -215,6 +239,7 @@ async def manage_users():
 #---------------------------------后端API--------------------------------------------
 
 #获取日志
+#http://127.0.0.1:9000/api/blogs?page=1
 @get('/api/blogs')
 async def api_blog(*,page='1'):
 	page_index = get_page_index(page)
@@ -265,20 +290,44 @@ async def api_delete_blog(id,request):
     blog = await Blog.find(id)
     await blog.remove()
     return dict(id=id)	
+
 #获取评论
+#http://127.0.0.1:9000/api/comments?page=1,2,3,....
 @get('/api/comments')
-async def api_get_comments():
-	pass
+async def api_get_comments(*,page='1'):
+	page_index = get_page_index(page)
+	num = await Comment.findNumber('count(id)')
+	p = Page(num,page_index)
+	if num == 0:
+		return dict(page=p,comment=())
+	comments = await Comment.findAll(orderBy='created_at desc',limit=(p.offset,p.limit))
+	return dict(page=p,comments=comments)
 
 #创建评论
 @post('/api/blogs/{id}/comments')
-async def api_create_comments():
-	pass
+async def api_create_comments(id,request,*,content):
+	user = request.__user__
+	if user is None:
+		raise APIPermissioinError('please signin first.')
+	if not content or not content.strip():
+		raise APIValueError('content','content connot be empty')
+	blog = await Blog.find(id)
+	if blog is None:
+		#确保每一个存入的评论都有对应的blog
+		raise APIResourceNotFoundError('Blog')
+	comment = Comment(blog_id=blog.id,user_id=request.__user__.id, user_name=request.__user__.name,user_image=request.__user__.image,content=content.strip())
+	await comment.save()
+	return comment
 
 #删除评论
-@post('/api/blogs/{comment_id}/delete')
-async def api_delete_comment(*,comment_id):
-	pass
+@post('/api/comments/{id}/delete')
+async def api_delete_comment(id,request):
+	check_admin(request)
+	c = await Comment.find(id)
+	if c is None:
+		raise APIResourceNotFoundError('comment is not exist')
+	await c.remove()
+	return dict(id=id)
 
 #创建新用户
 @post('/api/users')
@@ -309,6 +358,7 @@ async def api_register_user(*,email,name,passwd):
 	return r
 
 #获取用户
+#http://127.0.0.1:9000/api/users
 @get('/api/users')
 async def api_get_users():
 	users = await User.findAll(orderBy='created_at')

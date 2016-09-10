@@ -146,7 +146,7 @@ class RequestHandler(object):
 					for k,v in parse.parse_qs(qs,True).items():
 						kw[k] = v[0]
 		if kw is None:
-			#从request中取参数
+			#从path中找参数  如/manage/blogs/{id}/delete,就找出了id
 			kw = dict(**request.match_info)
 		else:
 			#如果只有命名关键字参数
@@ -165,7 +165,8 @@ class RequestHandler(object):
 				for k,v in request.match_info.items():
 					if k in kw:
 						logging.warning('Duplicate arg name in named arg and args: %s' % k)
-						kw[k] = v
+					#靠,这里又缩进到if里面了
+					kw[k] = v
 
 
 		#存在请求参数
