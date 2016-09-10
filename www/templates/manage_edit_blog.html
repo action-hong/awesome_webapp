@@ -5,6 +5,7 @@
 {% block beforehead %}
 
 <script>
+//这里的id和action如果是edit的,就会有值
 var
     ID = '{{ id }}',
     action = '{{ action }}';
@@ -23,6 +24,7 @@ function initVM(blog) {
                         $form.showFormError(err);
                     }
                     else {
+                        //post失败,调转到/api/blogs页面
                         return location.assign('/api/blogs/' + r.id);
                     }
                 });
@@ -33,6 +35,7 @@ function initVM(blog) {
 }
 $(function () {
     if (ID) {
+        //有id,说明是点进来看的,通过api/blogs/id去拿这个东西
         getJSON('/api/blogs/' + ID, function (err, blog) {
             if (err) {
                 return fatal(err);

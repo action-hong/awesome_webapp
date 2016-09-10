@@ -137,7 +137,7 @@ class RequestHandler(object):
 					#不支持的content-type
 					return web.HTTPBadRequest('Unsupported Content-Type: %S' % request.content_type)
 			if request.method == 'GET':
-				#获取所有的get来的
+				#获取所有的get来的,xxx?id=1&name=kkopite,取出id,kkopite
 				qs = request.query_string
 				if qs:
 					kw = dict()

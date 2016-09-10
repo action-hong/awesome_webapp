@@ -102,11 +102,12 @@ async def cookie2user(cookie_str):
 @get('/')
 async def index(request):
 	summary = 'Lorem ipsum dolor sit amet, consectetur adipisicing elitsed do eiusmod tempor incididunt ut labore et dolore magna aliqua.'
-	blogs = [
-	    Blog(id='1', name='Test Blog', summary=summary, created_at=time.time()-120),
-	    Blog(id='2', name='Something New', summary=summary, created_at=time.time()-3600),
-	    Blog(id='3', name='Learn Swift', summary=summary, created_at=time.time()-7200)
-	]
+	# blogs = [
+	#     Blog(id='1', name='Test Blog', summary=summary, created_at=time.time()-120),
+	#     Blog(id='2', name='Something New', summary=summary, created_at=time.time()-3600),
+	#     Blog(id='3', name='Learn Swift', summary=summary, created_at=time.time()-7200)
+	# ]
+	blogs = await Blog.findAll(orderBy='created_at desc')
 	# return dict(blogs=blogs)
 	return {
 		'__template__': 'blogs.html',
@@ -114,13 +115,7 @@ async def index(request):
 	}
 
 
-@get('/api/users')
-async def api_get_users():
-	users = await User.findAll(orderBy='created_at')
-	for u in users:
-		u.passwd = '******'
-	#返回一个dict,user=>user的list
-	return dict(users=users)
+
 
 @post('/api/authenticate')
 async def authenticate(*,email,passwd):
@@ -159,7 +154,133 @@ async def signout(request):
 	logging.info('user sign out.')
 	return r
 
-#明明有写,为毛post数据到这个地址找不到呢?
+
+@get('/blog/{id}')
+async def get_blog(id):
+	blog = await Blog.find(id)
+	comments = await Comment.findAll('blog_id=?',[id],orderBy='created_at desc')
+	for c in comments:
+		c.html_content = text2html(c.content)
+	return {
+		'__template__':'blog.html',
+		'blog':blog,
+		'comments':comments
+	}
+
+
+@get('/api/blogs/{id}')
+async def api_get_blogs(*,id):
+	blog = await Blog.find(id)
+	return blog
+
+#---------------------------------管理页面--------------------------------------------
+
+@get('/manage/comments')
+async def manage_comments():
+	pass
+
+@get('/manage/blogs')
+def manage_blogs(*,page='1'):
+	return {
+		'__template__':'manage_blogs.html',
+		'page_index':get_page_index(page)
+	}
+
+@get('/manage/blogs/create')
+async def manage_create_blog():
+	return {
+		'__template__':'manage_edit_blog.html',
+		'id':'',
+		'action':'/api/blogs'
+	}
+
+
+@get('/manage/blogs/edit')
+async def manage_edit_blog(*,id):
+	return {
+		'__template__':'manage_edit_blog.html',
+		'id':id,
+		'action':'/api/blogs/%s' % id
+	}
+
+
+@get('/manage/users')
+async def manage_users():
+	pass	
+
+
+
+#---------------------------------后端API--------------------------------------------
+#---------------------------------后端API--------------------------------------------
+#---------------------------------后端API--------------------------------------------
+
+#获取日志
+@get('/api/blogs')
+async def api_blog(*,page='1'):
+	page_index = get_page_index(page)
+	num = await Blog.findNumber('count(id)')
+	p = Page(num,page_index)
+	if num == 0:
+		return dict(page = p,blogs = ())
+	blogs = await Blog.findAll(orderBy='created_at desc',limit=(p.offset,p.limit))
+	return dict(page=p,blogs=blogs)
+
+#创建日志
+@post('/api/blogs')
+async def api_create_blog(request,*,name,summary,content):
+	check_admin(request)
+	if not name or not name.strip():
+		raise APIValueError('name','name connot be empty')
+	if not summary or not summary.strip():
+		raise APIValueError('summary','summary connot be empty')
+	if not content or not content.strip():
+		raise APIValueError('content','content connot be empty')
+	blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
+	await blog.save()
+	return blog
+
+#更新日志
+@post('/api/blogs/{id}')
+async def api_update_blog(request,*,id,name,summary,content):
+	check_admin(request)
+	#明明是Blogs去找,为毛是变成user了?
+	blog = await Blog.find(id)
+	if not name or not name.strip():
+		raise APIValueError('name','name connot be empty')
+	if not summary or not summary.strip():
+		raise APIValueError('summary','summary connot be empty')
+	if not content or not content.strip():
+		raise APIValueError('content','content connot be empty')
+	blog.name = name.strip()
+	blog.summary = summary.strip()
+	blog.content = content.strip()
+	await blog.update()
+	return blog
+
+#删除日志
+@post('/api/blogs/{id}/delete')
+async def api_delete_blog(id,request):
+    check_admin(request)
+    #这个id并没有取到呀
+    blog = await Blog.find(id)
+    await blog.remove()
+    return dict(id=id)	
+#获取评论
+@get('/api/comments')
+async def api_get_comments():
+	pass
+
+#创建评论
+@post('/api/blogs/{id}/comments')
+async def api_create_comments():
+	pass
+
+#删除评论
+@post('/api/blogs/{comment_id}/delete')
+async def api_delete_comment(*,comment_id):
+	pass
+
+#创建新用户
 @post('/api/users')
 async def api_register_user(*,email,name,passwd):
 	if not name or not name.strip():
@@ -187,40 +308,15 @@ async def api_register_user(*,email,name,passwd):
 	r.body = json.dumps(user,ensure_ascii=False).encode('utf-8')
 	return r
 
-@get('/blog/{id}')
-async def get_blog(id):
-	blog = await Blog.find(id)
-	comments = await Comment.findAll('blog_id=?',[id],orderBy='created_at desc')
-	for c in comments:
-		c.html_content = text2html(c.content)
-	return {
-		'__template__':'blog.html',
-		'blog':blog,
-		'comments':comments
-	}
+#获取用户
+@get('/api/users')
+async def api_get_users():
+	users = await User.findAll(orderBy='created_at')
+	for u in users:
+		u.passwd = '******'
+	#返回一个dict,user=>user的list
+	return dict(users=users)
 
-@get('/manage/blogs/create')
-async def manage_create_blog():
-	return {
-		'__template__':'manage_edit_blog.html',
-		'id':'',
-		'action':'/api/blogs'
-	}
-
-@get('/api/blogs/{id}')
-async def api_get_blogs(*,id):
-	blog = await Blog.find(id)
-	return blog
-
-@post('/api/blogs')
-async def api_create_blog(request,*,name,summary,content):
-	check_admin(request)
-	if not name or not name.strip():
-		raise APIValueError('name','name connot be empty')
-	if not summary or not summary.strip():
-		raise APIValueError('summary','summary connot be empty')
-	if not content or not content.strip():
-		raise APIValueError('content','content connot be empty')
-	blog = Blog(user_id=request.__user__.id, user_name=request.__user__.name, user_image=request.__user__.image, name=name.strip(), summary=summary.strip(), content=content.strip())
-	await blog.save()
-	return blog
+#---------------------------------后端API--------------------------------------------
+#---------------------------------后端API--------------------------------------------
+#---------------------------------后端API--------------------------------------------
